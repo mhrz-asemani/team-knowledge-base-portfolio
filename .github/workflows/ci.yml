@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: team_knowledge_base_test
+          POSTGRES_USER: tkb
+          POSTGRES_PASSWORD: tkb_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tkb -d team_knowledge_base_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://tkb:tkb_test_password@localhost:5432/team_knowledge_base_test
+      TEST_DATABASE_URL: postgresql://tkb:tkb_test_password@localhost:5432/team_knowledge_base_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v1
+        with:
+          version: 12.15.0
+          runtime: node@22.22.3
+          install: false
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply database migrations
+        run: pnpm db:migrate:up
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+      - name: Validate Docker Compose
+        run: docker compose config -q
+      - name: Build Docker images
+        run: docker compose build api web

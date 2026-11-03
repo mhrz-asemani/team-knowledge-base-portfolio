@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-team_knowledge_base}
+      POSTGRES_USER: ${POSTGRES_USER:-tkb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_only_change_me}
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+    volumes:
+      - tkb_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-tkb} -d ${POSTGRES_DB:-team_knowledge_base}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["pnpm", "--filter", "@tkb/api", "db:migrate:up"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tkb}:${POSTGRES_PASSWORD:-local_dev_only_change_me}@db:5432/${POSTGRES_DB:-team_knowledge_base}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tkb}:${POSTGRES_PASSWORD:-local_dev_only_change_me}@db:5432/${POSTGRES_DB:-team_knowledge_base}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      GROQ_INPUT_COST_PER_MILLION_USD: ${GROQ_INPUT_COST_PER_MILLION_USD:-0.15}
+      GROQ_OUTPUT_COST_PER_MILLION_USD: ${GROQ_OUTPUT_COST_PER_MILLION_USD:-0.60}
+      GROQ_MAX_REQUEST_COST_USD: ${GROQ_MAX_REQUEST_COST_USD:-0.01}
+      PORT: 3000
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  tkb_postgres_data:

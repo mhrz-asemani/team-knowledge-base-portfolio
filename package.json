@@ -1,0 +1,18 @@
+{
+  "name": "team-knowledge-base",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "engines": { "node": ">=22.22.3" },
+  "scripts": {
+    "dev:web": "pnpm --filter @tkb/web dev",
+    "dev:api": "pnpm --filter @tkb/api start:dev",
+    "build": "pnpm -r --if-present run build",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "test:e2e": "node --test e2e/browser-flows.test.cjs",
+    "db:migrate:up": "pnpm --filter @tkb/api db:migrate:up",
+    "db:migrate:down": "pnpm --filter @tkb/api db:migrate:down",
+    "smoke": "node scripts/smoke-test.mjs"
+  }
+}
