@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { ApiError, apiRequest, apiStream } from './api';
 
 type User = { id: string; email: string };
@@ -44,6 +44,7 @@ export default function App() {
   const [documentTitle, setDocumentTitle] = useState('');
   const [documentContent, setDocumentContent] = useState('');
   const [editingDocument, setEditingDocument] = useState<Document | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
   const [memberEmail, setMemberEmail] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -51,6 +52,7 @@ export default function App() {
   const [documentLoading, setDocumentLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const [summary, setSummary] = useState<DocumentSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -122,6 +124,16 @@ export default function App() {
   }, [loadWorkspaces]);
 
   useEffect(() => {
+    if (!toast && !error && !message) return;
+    const timeout = window.setTimeout(() => {
+      setToast('');
+      setError('');
+      setMessage('');
+    }, 4000);
+    return () => window.clearTimeout(timeout);
+  }, [toast, error, message]);
+
+  useEffect(() => {
     let active = true;
     apiRequest<{ user: User }>('/auth/me')
       .then(async (result) => {
@@ -170,7 +182,7 @@ export default function App() {
           body: JSON.stringify({ email: authEmail, password: authPassword }),
         });
         await loadSession();
-        setMessage('با موفقیت وارد شدید.');
+        setToast('با موفقیت وارد شدید.');
       }
       setAuthPassword('');
     } catch (cause) {
@@ -238,6 +250,7 @@ export default function App() {
       }
       setEditingDocument(null);
       setViewingDocument(null);
+      setEditorOpen(false);
       setDocumentTitle('');
       setDocumentContent('');
       setPage(1);
@@ -250,6 +263,7 @@ export default function App() {
   }
 
   function viewDocument(document: Document) {
+    setEditorOpen(false);
     setViewingDocument(document);
     setSummary(null);
     setSummaryProgress(0);
@@ -285,6 +299,7 @@ export default function App() {
   }
   function beginEdit(document: Document) {
     setViewingDocument(null);
+    setEditorOpen(true);
     setEditingDocument(document);
     setDocumentTitle(document.title);
     setDocumentContent(document.contentMarkdown);
@@ -360,6 +375,7 @@ export default function App() {
   function cancelEdit() {
     setEditingDocument(null);
     setViewingDocument(null);
+    setEditorOpen(false);
     setDocumentTitle('');
     setDocumentContent('');
   }
@@ -372,33 +388,33 @@ export default function App() {
     <div className="app" dir="rtl">
       <header className="topbar">
         <a className="brand" href="/" aria-label="صفحه اصلی پایگاه دانش">
-          <span className="brand-mark" aria-hidden="true">K</span>
-          <span><strong>پایگاه دانش تیم</strong><small>Team Knowledge Base</small></span>
+          <span className="brand-mark" aria-hidden="true">✦</span>
+          <span><strong>پایگاه دانش تیمی</strong><small>Team Knowledge Base</small></span>
         </a>
         <div className="topbar-actions">
-          <span className="environment-label">نسخه اولیه · مرحله ۲</span>
-          {user && <button className="button button-quiet" onClick={() => void logout()}>خروج</button>}
+          {user && <><span className="topbar-context">{selectedWorkspace?.name ?? 'فضای دانش تیمی'}</span><span className="topbar-avatar">{user.email.slice(0, 1).toUpperCase()}</span><button className="button button-quiet" onClick={() => void logout()}>خروج</button></>}
         </div>
       </header>
 
-      {(error || message) && (
-        <div className={`notice ${error ? 'notice-error' : 'notice-success'}`} role={error ? 'alert' : 'status'}>
-          <span>{error || message}</span>
-          <button className="notice-close" aria-label="بستن پیام" onClick={() => { setError(''); setMessage(''); }}>×</button>
+      {(error || message || toast) && (
+        <div className={`notice toast ${error ? 'notice-error' : 'notice-success'}`} role={error ? 'alert' : 'status'} aria-live={error ? 'assertive' : 'polite'}>
+          <span>{error || message || toast}</span>
+          <button className="notice-close" aria-label="بستن پیام" onClick={() => { setError(''); setMessage(''); setToast(''); }}>×</button>
         </div>
       )}
+
+      {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
 
       {!user ? (
         <main className="auth-layout">
           <section className="auth-intro">
-            <p className="eyebrow">دانش تیم، یک‌جا</p>
-            <h1>دانش پراکنده را به دانشی مشترک تبدیل کنید.</h1>
-            <p>فضاهای کاری بسازید، اسناد Markdown را مدیریت کنید و دانش تیم را در دسترس اعضای مجاز نگه دارید.</p>
-            <div className="feature-points">
-              <span>✓ فضای کاری مستقل</span><span>✓ دسترسی مبتنی بر نقش</span><span>✓ جست‌وجوی اسناد</span>
-            </div>
+            <a className="auth-brand" href="/" aria-label="پایگاه دانش تیمی"><span className="brand-mark">✦</span><span><strong>TKB</strong><small>Team Knowledge Base</small></span></a>
+            <div className="auth-copy"><p className="eyebrow">دانش تیم، یک‌جا</p><h1>دانش تیمت را مدیریت کن</h1><p>مستندات، ایده‌ها و تجربه‌های تیم خود را در یک محیط امن و سازمان‌یافته نگه دارید.</p></div>
+            <div className="auth-art" aria-hidden="true"><div className="art-leaf leaf-one" /><div className="art-leaf leaf-two" /><div className="art-book book-back" /><div className="art-book book-front"><i /><i /><i /></div><div className="art-laptop"><div className="laptop-screen"><span>TKB</span><b>دانش تیمی</b><i /><i /></div><div className="laptop-base" /></div><div className="art-check">✓</div></div>
+            <div className="feature-points"><span>✓ فضای کاری مستقل</span><span>✓ دسترسی مبتنی بر نقش</span><span>✓ جست‌وجوی اسناد</span></div>
           </section>
           <section className="panel auth-panel">
+            <div className="auth-tabs" role="tablist" aria-label="ورود یا ثبت‌نام"><button type="button" role="tab" aria-selected={authMode === 'register'} className={authMode === 'register' ? 'active' : ''} onClick={() => { setAuthMode('register'); setError(''); setMessage(''); }}>ثبت‌نام</button><button type="button" role="tab" aria-selected={authMode === 'login'} className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setError(''); setMessage(''); }}>ورود</button></div>
             <div className="panel-heading">
               <h2>{authMode === 'login' ? 'خوش برگشتید' : 'ساخت حساب کاربری'}</h2>
               <p>{authMode === 'login' ? 'برای ادامه وارد حساب خود شوید.' : 'برای شروع یک حساب بسازید.'}</p>
@@ -425,6 +441,13 @@ export default function App() {
       ) : (
         <main className="workspace-layout">
           <aside className="sidebar">
+            <div className="sidebar-brand"><span className="brand-mark">✦</span><span><strong>TKB</strong><small>Team Knowledge Base</small></span></div>
+            <nav className="sidebar-nav" aria-label="ناوبری اصلی">
+              <a className="nav-item is-active" href="#dashboard">⌂ <span>داشبورد</span></a>
+              <a className="nav-item" href="#documents">▤ <span>اسناد</span></a>
+              <a className="nav-item" href="#members">♧ <span>اعضا</span></a>
+              <button className="nav-item nav-item-disabled" type="button" disabled aria-label="تنظیمات، به‌زودی"><span aria-hidden="true">⚙</span><span>تنظیمات</span><small>به‌زودی 🔒</small></button>
+            </nav>
             <div className="sidebar-section">
               <p className="section-label">حساب کاربری</p>
               <div className="user-chip"><span className="avatar">{user.email.slice(0, 1).toUpperCase()}</span><span className="user-email">{user.email}</span></div>
@@ -455,19 +478,24 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div className="page-heading">
-                  <div>
-                    <p className="eyebrow">فضای کاری / {selectedWorkspace.name}</p>
-                    <h1>{selectedWorkspace.name}</h1>
-                    <p className="page-subtitle">اسناد تیم را ثبت کنید، پیدا کنید و به‌روز نگه دارید.</p>
-                  </div>
-                  <span className={`role-pill role-${selectedWorkspace.role}`}>{roleLabel(selectedWorkspace.role)}</span>
-                </div>
+                <div className="mockup-breadcrumb">فضاهای کاری　/　{selectedWorkspace.name}</div>
+                <div className="mockup-page-heading"><h2>نمای کلی</h2><span className={`role-pill role-${selectedWorkspace.role}`}>{roleLabel(selectedWorkspace.role)} فضای کاری</span></div>
+                <section className="dashboard-hero" id="dashboard">
+                  <div className="dashboard-welcome"><p className="eyebrow">فضای کاری شما</p><h1>سلام {user.email.split('@')[0]}! 👋</h1><p>به فضای دانش تیم خوش آمدید. همه چیز برای ثبت و اشتراک دانش آماده است.</p><button className="button button-primary" type="button" onClick={() => { setEditingDocument(null); setDocumentTitle(''); setDocumentContent(''); setEditorOpen(true); }}>＋ ایجاد سند جدید</button></div>
+                  <div className="welcome-art" aria-hidden="true"><div className="welcome-orbit" /><div className="welcome-paper"><i /><i /><i /></div><div className="welcome-stack"><b /><b /><b /></div><span className="welcome-check">✓</span></div>
+                </section>
+                <section className="dashboard-stats" aria-label="آمار فضای کاری">
+                  <article className="stat-card"><span className="stat-icon stat-green">♧</span><div><strong>{members.length.toLocaleString('fa-IR')}</strong><small>عضو فضای کاری</small></div></article>
+                  <article className="stat-card"><span className="stat-icon stat-blue">▤</span><div><strong>{totalDocuments.toLocaleString('fa-IR')}</strong><small>مجموع اسناد</small></div></article>
+                  <article className="stat-card"><span className="stat-icon stat-orange">✦</span><div><strong>آماده</strong><small>وضعیت فضای کاری</small></div></article>
+                </section>
+                
 
                 {viewingDocument && <section className="panel document-view-panel">
                   <div className="panel-heading document-view-heading"><div><p className="eyebrow">مشاهده سند</p><h2>{viewingDocument.title}</h2><p>آخرین تغییر: {formatDate(viewingDocument.updatedAt)}</p></div><div className="document-actions"><button className="button button-quiet" onClick={() => setViewingDocument(null)}>بستن</button>{selectedWorkspace.role !== 'viewer' && <button className="button button-primary" onClick={() => beginEdit(viewingDocument)}>ویرایش سند</button>}</div></div>
-                  <pre className="markdown-content">{viewingDocument.contentMarkdown || 'این سند هنوز محتوایی ندارد.'}</pre>
-                  <section className="ai-summary">
+                  <div className="document-view-layout">
+                    <article className="markdown-rendered document-reading">{renderMarkdown(viewingDocument.contentMarkdown || 'این سند هنوز محتوایی ندارد.')}</article>
+                    <section className="ai-summary">
                     <div className="ai-summary-toolbar">
                       <div><h3>خلاصه‌سازی هوشمند</h3><p>خلاصه و نکات کلیدی از محتوای همین سند</p></div>
                       <button className="button button-primary" type="button" disabled={summaryLoading || !viewingDocument.contentMarkdown.trim()} onClick={() => void summarizeDocument(viewingDocument)}>
@@ -483,10 +511,11 @@ export default function App() {
                         {summary.usage && <span>Token: {summary.usage.totalTokens.toLocaleString('fa-IR')} · هزینه تخمینی: ${summary.usage.estimatedCostUsd.toFixed(6)}</span>}
                       </div>
                     </div>}
-                  </section>
+                    </section>
+                  </div>
                 </section>}
 
-                <section className="panel editor-panel">
+                {editorOpen && <section className="panel editor-panel">
                   <div className="panel-heading editor-heading">
                     <div><h2>{editingDocument ? 'ویرایش سند' : 'سند جدید'}</h2><p>محتوا به‌صورت Markdown ذخیره می‌شود.</p></div>
                     {editingDocument && <button className="button button-quiet" onClick={cancelEdit} type="button">لغو ویرایش</button>}
@@ -498,16 +527,22 @@ export default function App() {
                       <label>عنوان سند
                         <input required minLength={1} maxLength={200} value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} placeholder="مثلاً راهنمای شروع پروژه" />
                       </label>
-                      <label>محتوای Markdown
-                        <textarea rows={5} maxLength={100000} value={documentContent} onChange={(event) => setDocumentContent(event.target.value)} placeholder={'# عنوان\n\nمحتوای سند را اینجا بنویسید…'} />
-                      </label>
+                      <div className="editor-split" dir="rtl">
+                        <label className="editor-source">متن Markdown
+                          <textarea rows={14} maxLength={100000} value={documentContent} onChange={(event) => setDocumentContent(event.target.value)} placeholder={'# عنوان\n\nمحتوای سند را اینجا بنویسید…'} />
+                        </label>
+                        <section className="editor-preview" aria-label="پیش‌نمایش زنده سند">
+                          <div className="preview-heading"><span className="preview-dot" /> پیش‌نمایش زنده</div>
+                          <article className="markdown-rendered">{renderMarkdown(documentContent || 'پیش‌نمایش سند در این بخش نمایش داده می‌شود.')}</article>
+                        </section>
+                      </div>
                       <div className="form-footer"><span className="muted small">{documentContent.length.toLocaleString('fa-IR')} / ۱۰۰٬۰۰۰ نویسه</span><button className="button button-primary" disabled={saving}>{saving ? 'در حال ذخیره…' : editingDocument ? 'ذخیره تغییرات' : 'ایجاد سند'}</button></div>
                     </form>
                   )}
-                </section>
+                </section>}
 
-                <section className="documents-section">
-                  <div className="list-heading"><div><h2>اسناد</h2><p>{totalDocuments.toLocaleString('fa-IR')} سند در این فضا</p></div></div>
+                <section className="documents-section" id="documents">
+                  <div className="list-heading"><div><h2>اسناد</h2><p>{totalDocuments.toLocaleString('fa-IR')} سند در این فضا</p></div>{selectedWorkspace.role !== 'viewer' && <button className="button button-primary" type="button" onClick={() => { setEditingDocument(null); setDocumentTitle(''); setDocumentContent(''); setEditorOpen(true); }}>＋ سند جدید</button>}</div>
                   <div className="toolbar panel">
                     <form className="search-form" onSubmit={applySearch}>
                       <label className="sr-only" htmlFor="document-search">جست‌وجوی اسناد</label>
@@ -529,27 +564,23 @@ export default function App() {
                   {documentLoading ? <div className="panel list-state" role="status"><span className="spinner" />در حال بارگذاری اسناد…</div> : documents.length === 0 ? (
                     <div className="panel list-state"><span className="empty-icon">⌕</span><h3>{appliedQuery ? 'نتیجه‌ای پیدا نشد' : 'هنوز سندی وجود ندارد'}</h3><p>{appliedQuery ? 'عبارت دیگری را جست‌وجو کنید.' : 'اولین سند این فضای کاری را با فرم بالا ایجاد کنید.'}</p></div>
                   ) : (
-                    <div className="document-list">
-                      {documents.map((document) => (
-                        <article className="document-card panel" key={document.id}>
-                          <div className="document-symbol">▤</div>
-                          <div className="document-details">
-                            <h3>{document.title}</h3>
-                            <p className="document-preview">{document.contentMarkdown || 'این سند هنوز محتوایی ندارد.'}</p>
-                            <div className="document-meta"><span>آخرین تغییر: {formatDate(document.updatedAt)}</span><span>نویسنده: {document.updatedBy === user.id ? 'شما' : 'عضو تیم'}</span></div>
-                          </div>
-                          <div className="document-actions">
-                            <button className="button button-outline" onClick={() => viewDocument(document)}>مشاهده</button>{selectedWorkspace.role !== 'viewer' && <button className="button button-quiet" onClick={() => beginEdit(document)}>ویرایش</button>}
-                            {selectedWorkspace.role !== 'viewer' && <button className="button button-danger-quiet" onClick={() => void deleteDocument(document)}>حذف</button>}
-                          </div>
-                        </article>
-                      ))}
+                    <div className="document-table-wrap">
+                      <table className="document-table">
+                        <thead><tr><th>عنوان سند</th><th>آخرین ویرایش</th><th>نویسنده</th><th className="actions-heading">اقدام‌ها</th></tr></thead>
+                        <tbody>{documents.map((document) => (
+                          <tr key={document.id}>
+                            <td><button className="document-title-link" type="button" onClick={() => viewDocument(document)}><span className="document-symbol">▤</span><span><strong>{document.title}</strong><small>{document.contentMarkdown || 'این سند هنوز محتوایی ندارد.'}</small></span></button></td>
+                            <td>{formatDate(document.updatedAt)}</td><td>{document.updatedBy === user.id ? 'شما' : 'عضو تیم'}</td>
+                            <td><div className="document-actions"><button className="button button-quiet" onClick={() => viewDocument(document)}>مشاهده</button>{selectedWorkspace.role !== 'viewer' && <button className="button button-quiet" onClick={() => beginEdit(document)}>ویرایش</button>}{selectedWorkspace.role !== 'viewer' && <button className="button button-danger-quiet" onClick={() => void deleteDocument(document)}>حذف</button>}</div></td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
                     </div>
                   )}
                   {pageCount > 1 && <div className="pagination"><span>صفحه {page.toLocaleString('fa-IR')} از {pageCount.toLocaleString('fa-IR')}</span><div><button className="button button-outline" disabled={page <= 1 || documentLoading} onClick={() => setPage((current) => Math.max(1, current - 1))}>قبلی</button><button className="button button-outline" disabled={page >= pageCount || documentLoading} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>بعدی</button></div></div>}
                 </section>
 
-                <section className="panel members-panel">
+                <section className="panel members-panel" id="members">
                   <div className="panel-heading"><h2>اعضای فضای کاری</h2><p>مدیریت عضویت‌ها فقط برای مالک فعال است.</p></div>
                   {selectedWorkspace.role === 'owner' && <form className="add-member-form" onSubmit={(event) => void addMember(event)}><label className="sr-only" htmlFor="member-email">ایمیل عضو جدید</label><input id="member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="ایمیل کاربر ثبت‌نام‌شده" /><button className="button button-outline" disabled={saving}>افزودن عضو</button></form>}
                   <div className="members-list">
@@ -583,4 +614,68 @@ function formatDate(value: string): string {
 function toMessage(cause: unknown): string {
   if (cause instanceof Error) return cause.message;
   return 'خطای پیش‌بینی‌نشده‌ای رخ داد. دوباره تلاش کنید.';
+}
+
+
+function renderInlineMarkdown(value: string): ReactNode {
+  return value.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g).map((token, index) => {
+    if (token.startsWith('**') && token.endsWith('**')) return <strong key={index}>{token.slice(2, -2)}</strong>;
+    if (token.startsWith('`') && token.endsWith('`')) return <code className="inline-code" dir="ltr" key={index}>{token.slice(1, -1)}</code>;
+    if (token.startsWith('*') && token.endsWith('*')) return <em key={index}>{token.slice(1, -1)}</em>;
+    return token;
+  });
+}
+
+function renderMarkdown(markdown: string): ReactNode {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
+  let paragraph: string[] = [];
+  let list: string[] = [];
+  let ordered = false;
+  let code: string[] | null = null;
+
+  const flushParagraph = () => {
+    if (paragraph.length) {
+      blocks.push(<p key={blocks.length}>{paragraph.map((line) => renderInlineMarkdown(line)).reduce<ReactNode[]>((all, part, index) => index ? [...all, <br key={index} />, part] : [part], [])}</p>);
+      paragraph = [];
+    }
+  };
+  const flushList = () => {
+    if (list.length) {
+      const items = list.map((item, index) => <li key={index}>{renderInlineMarkdown(item)}</li>);
+      blocks.push(ordered ? <ol key={blocks.length}>{items}</ol> : <ul key={blocks.length}>{items}</ul>);
+      list = [];
+    }
+  };
+
+  for (const line of lines) {
+    if (line.trim().startsWith('```')) {
+      flushParagraph(); flushList();
+      if (code) {
+        blocks.push(<pre className="code-block" dir="ltr" key={blocks.length}><code>{code.join('\n')}</code></pre>);
+        code = null;
+      } else code = [];
+      continue;
+    }
+    if (code) { code.push(line); continue; }
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    const number = line.match(/^\s*\d+\.\s+(.+)$/);
+    if (heading || bullet || number || !line.trim()) { flushParagraph(); }
+    if (heading) {
+      flushList();
+      const level = heading[1].length;
+      const content = renderInlineMarkdown(heading[2]);
+      blocks.push(level === 1 ? <h1 key={blocks.length}>{content}</h1> : level === 2 ? <h2 key={blocks.length}>{content}</h2> : <h3 key={blocks.length}>{content}</h3>);
+    } else if (bullet || number) {
+      const nextOrdered = Boolean(number);
+      if (list.length && ordered !== nextOrdered) flushList();
+      ordered = nextOrdered;
+      list.push((bullet ?? number)![1]);
+    } else if (!line.trim()) flushList();
+    else { flushList(); paragraph.push(line); }
+  }
+  flushParagraph(); flushList();
+  if (code) blocks.push(<pre className="code-block" dir="ltr" key={blocks.length}><code>{code.join('\n')}</code></pre>);
+  return <>{blocks}</>;
 }
