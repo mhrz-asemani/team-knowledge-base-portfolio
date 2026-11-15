@@ -1,57 +1,128 @@
 # Team Knowledge Base
 
-Team Knowledge Base is a collaborative web application for organizing a team's shared knowledge in workspaces. Members can create and manage Markdown documents, search and sort them, and collaborate under workspace roles. Owners manage membership; Members can work with documents; Viewers have read-only access. Documents are scoped to a workspace and access is enforced by the API.
+Team Knowledge Base is a collaborative knowledge-management application for teams. Users work inside isolated workspaces, manage Markdown documents, and collaborate through workspace roles. The interface is Persian and fully right-to-left (RTL).
+
+- **Live application:** https://team-knowledge-base-web.onrender.com/
+- **API documentation:** https://team-knowledge-base-api-e0g1.onrender.com/api/v1/docs
+- **Repository:** https://github.com/mhrz-asemani/team-knowledge-base-portfolio
 
 ## Technology stack
 
-| Area | Technology | Role |
-|---|---|---|
-| Frontend | React, TypeScript, Vite | Persian, right-to-left single-page application |
-| Web server | Nginx | Serves the production frontend container |
-| Backend | NestJS, TypeScript | Versioned REST API under `/api/v1` |
-| Database | PostgreSQL | Persistent users, sessions, workspaces, memberships, and documents |
-| Data access | `pg` with parameterized SQL | Explicit, safe SQL queries without an ORM |
-| Schema changes | `node-pg-migrate` | Versioned database migrations |
-| Monorepo | pnpm Workspaces | Shared dependency management for frontend and API |
-| Optional AI | Groq API | Streams structured summaries for workspace documents |
+### Frontend
+- **React 19** — component-based user interface.
+- **TypeScript 6** — static typing for application code.
+- **Vite 8** — development server and production bundling.
+- **Vitest 5** — frontend automated tests.
+- **Nginx** — serves the compiled static frontend in the Docker Compose deployment.
+
+### Backend
+- **Node.js 22** — server-side JavaScript runtime.
+- **NestJS 12 + TypeScript 6** — REST API implementation.
+- **Express** — HTTP platform used by NestJS.
+- **PostgreSQL 18** — relational database for users, sessions, workspaces, memberships, and documents.
+- **node-postgres (pg)** — database connectivity and parameterized SQL queries; no ORM is used.
+- **node-pg-migrate** — version-controlled database schema migrations.
+- **class-validator + class-transformer** — request DTO validation and transformation.
+- **Argon2id** — password hashing.
+- **@nestjs/throttler** — API rate limiting.
+- **Groq SDK** — optional LLM integration for document summaries.
+- **Vitest 5** — backend automated tests.
+
+### Shared tooling and quality
+- **pnpm 12 Workspaces** — monorepo package and dependency management.
+- **TypeScript** — shared language and type-checking across frontend and backend.
+- **OpenAPI / Swagger** — documented, versioned REST API contract.
+- **Node.js test runner** — browser-flow end-to-end test script.
 
 ## Application architecture
 
-The frontend is a React single-page application. It owns the user interface, local form state, and API client, and communicates with the backend over HTTP. It never connects directly to PostgreSQL or stores server secrets in the browser.
+### Repository and application boundaries
+The repository is a **pnpm Workspaces monorepo** with two independently built applications:
+- `apps/web` — React SPA responsible for presentation, client-side interaction, and communication with the API.
+- `apps/api` — NestJS REST API responsible for authentication, authorization, business rules, persistence, and AI-provider integration.
 
-The backend is a modular monolith: one NestJS API application organized into authentication, users, workspaces, memberships, documents, database, and health modules. A request is handled by a controller, validated and authorized, then processed by a service and parameterized database query.
+The browser communicates with the backend over HTTP. It does not connect directly to PostgreSQL and does not receive server-side credentials such as the Groq API key.
 
-This architecture keeps the product straightforward to develop and deploy while preserving clear domain boundaries. A single API and database avoid the operational cost of microservices at this scale. The REST/OpenAPI contract also allows clients beyond the web application to use the backend.
+### Backend: modular monolith
+The backend follows a **modular monolith** architecture rather than a microservices architecture:
+- Domain modules separate authentication, users, workspaces, memberships, documents, database access, and health checks.
+- Controllers expose HTTP endpoints and the API contract.
+- DTO validation and authorization are applied at the API boundary.
+- Services implement application and business logic.
+- Database access uses parameterized SQL through `pg`.
+- PostgreSQL stores application data; `node-pg-migrate` manages schema evolution.
 
-## Core capabilities
+This keeps deployment and operations relatively simple while retaining domain boundaries inside one API application.
 
-- Account registration, sign-in, sign-out, and persistent server-side sessions.
-- Workspace creation and selection.
-- Owner-managed membership and workspace roles.
-- Markdown document creation, reading, editing, and deletion.
-- Workspace-scoped document search, sorting, and pagination.
-- Optional streamed AI summaries with key points and action items.
-- API health and readiness endpoints, plus Swagger/OpenAPI documentation.
+### Authentication and access control
+- Opaque server-side sessions are delivered to the browser through **HttpOnly cookies**.
+- Passwords are hashed with **Argon2id**.
+- Workspace roles include **Owner**, **Member**, and **Viewer**.
+- Workspace and document access is enforced by the API; frontend role-aware controls are not treated as the security boundary.
 
-Authentication uses opaque server-side sessions delivered in HttpOnly cookies. Passwords are hashed with Argon2id. The API applies workspace-level authorization and validates request input; the frontend also reflects role-based capabilities for a clear user experience.
+### AI document summaries
+- The API integrates with **Groq** through its server-side SDK.
+- Summary generation is streamed to the client using **Server-Sent Events (SSE)**.
+- The generated result is validated against the expected structured output before being treated as final.
+- Provider credentials remain on the server and are configured as environment secrets.
+- The feature is optional and requires a Groq API key.
 
-## Local Docker setup
+## DevOps, containers, and CI/CD
 
-Requirements: Git, Docker Desktop or Docker Engine, and Docker Compose v2. From a terminal:
+### Docker and Docker Compose
+The project provides a containerized local stack:
+- **PostgreSQL container** with a persistent named volume and health check.
+- **Migration service** that waits for database readiness and applies migrations before the API starts.
+- **API container** built from a multi-stage Node.js Dockerfile, with a readiness health check.
+- **Frontend container** built in multiple stages and served by Nginx.
+- Compose dependency conditions coordinate database readiness, migration completion, and API health before dependent services start.
+
+Start the complete stack locally:
 
 ```bash
-git clone https://github.com/mhrz-asemani/team-knowledge-base-portfolio.git
-cd team-knowledge-base-portfolio
 cp .env.example .env
 docker compose up --build
 ```
 
-Compose starts PostgreSQL, waits for its health check, runs database migrations, then starts the API and frontend. Open the application at [http://localhost:8080](http://localhost:8080).
+Local endpoints:
+- Web application: http://localhost:8080
+- API: http://localhost:3000/api/v1
+- Liveness: http://localhost:3000/api/v1/health
+- Readiness: http://localhost:3000/api/v1/health/ready
+- Swagger UI: http://localhost:3000/api/v1/docs
+- OpenAPI JSON: http://localhost:3000/api/v1/openapi.json
 
-Other local endpoints:
+PostgreSQL data is stored in a named Docker volume and survives normal container restarts. Removing volumes with `docker compose down -v` deletes that local database data.
 
-- API liveness: [http://localhost:3000/api/v1/health](http://localhost:3000/api/v1/health)
-- API readiness: [http://localhost:3000/api/v1/health/ready](http://localhost:3000/api/v1/health/ready)
-- Swagger UI: [http://localhost:3000/api/v1/docs](http://localhost:3000/api/v1/docs)
+### GitHub Actions
+The GitHub Actions CI workflow runs for pushes and pull requests targeting `main`. It:
+- Starts an isolated PostgreSQL 18 service for CI.
+- Installs dependencies from the committed pnpm lockfile.
+- Applies database migrations.
+- Runs TypeScript type checks and automated tests.
+- Builds the frontend and backend.
+- Validates the Docker Compose configuration.
+- Builds the API and frontend Docker images.
 
-The AI summary feature remains unavailable until a Groq API key is configured in the local `.env` file. The database persists in a Docker volume across normal restarts. Use `docker compose down` to stop the stack; adding `-v` also removes the local database volume and its data.
+### Hosting and deployment
+The portfolio deployment is hosted on **Render**:
+- **Frontend:** Render Static Site, built from the React/Vite application and published from `apps/web/dist`.
+- **Backend:** Render Web Service using the API Dockerfile.
+- **Database:** Render-managed PostgreSQL, connected to the API through the database connection string.
+- **Region:** Frankfurt, as configured for the API service.
+- **Health monitoring:** the API service uses `/api/v1/health/ready` as its readiness health-check endpoint.
+- **Frontend-to-API configuration:** the API base URL is supplied through the frontend build environment; the API's allowed web origin is configured server-side.
+
+Production secrets, including the Groq API key, are configured as service environment variables and are not committed to the repository.
+
+## Main product capabilities
+- Account registration, sign-in, sign-out, and persistent sessions.
+- Workspace creation and selection.
+- Workspace membership management and role-based access control.
+- Markdown document creation, reading, editing, and deletion.
+- Workspace-scoped document search, sorting, and pagination.
+- Optional AI-generated document summaries streamed through SSE.
+- API health/readiness endpoints and Swagger/OpenAPI documentation.
+
+## Scope and limitations
+The current portfolio version includes collaborative workspaces, document management, role-based authorization, and initial LLM-powered summarization. **Embeddings, semantic search, and retrieval-augmented generation (RAG) are not implemented** in this version.
